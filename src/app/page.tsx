@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import type { z } from "zod";
+import { z } from "zod";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { verifyLocation } from "@/ai/flows/verify-location";
