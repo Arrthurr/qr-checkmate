@@ -264,7 +264,7 @@ export default function Home() {
         status={confirmationStatus.success}
         title={confirmationStatus.message}
         description={confirmationStatus.details}
-        icon={confirmationStatus.success ? <CheckCircle className="h-16 w-16 text-green-500" /> : <XCircle className="h-16 w-16 text-red-500" />}
+        icon={confirmationStatus.success ? <CheckCircle className="h-16 w-16 text-primary" /> : <XCircle className="h-16 w-16 text-red-500" />}
       />
     </>
   );

@@ -59,7 +59,7 @@ export default function ActivityLog({ log }: ActivityLogProps) {
                     </TableCell>
                     <TableCell className="text-center">
                       {entry.status === "success" ? (
-                        <CheckCircle className="h-5 w-5 text-green-500 inline-block" />
+                        <CheckCircle className="h-5 w-5 text-primary inline-block" />
                       ) : (
                         <XCircle className="h-5 w-5 text-red-500 inline-block" />
                       )}
