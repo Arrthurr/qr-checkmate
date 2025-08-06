@@ -32,6 +32,10 @@ const firebaseConfig = {
   appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID,
 };
 
+// Initialize Firebase only if it hasn't been initialized yet
+const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
+const db = getFirestore(app);
+
 const formSchema = z.object({
   fullName: z.string().min(2, { message: "Full name must be at least 2 characters." }),
   schoolId: z.string({ required_error: "Please select a school." }),
@@ -45,6 +49,7 @@ export default function Home() {
   const [confirmationStatus, setConfirmationStatus] = useState<{ success: boolean; message: string; details?: string }>({ success: false, message: "" });
   const [isProcessing, setIsProcessing] = useState(false);
   const [hasMounted, setHasMounted] = useState(false);
+  const [isLoadingLogs, setIsLoadingLogs] = useState(true);
 
   const { toast } = useToast();
 
@@ -60,11 +65,11 @@ export default function Home() {
   }, []);
 
  useEffect(() => {
- if (!hasMounted) return;
+    if (!hasMounted) return;
 
     const logsCollection = collection(db, "activityLogs");
     const q = query(logsCollection, orderBy("timestamp", "desc"));
-
+    setIsLoadingLogs(true);
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const fetchedLogs: LogEntry[] = snapshot.docs.map(doc => ({
         id: doc.id,
@@ -75,24 +80,26 @@ export default function Home() {
         status: doc.data().status,
         reason: doc.data().reason,
       }));
- setLog(fetchedLogs);
- });
- return () => unsubscribe(); // Cleanup on component unmount
-  }, [hasMounted, db]); // Depend on hasMounted and db
-  // Initialize Firebase only if it hasn't been initialized yet
-  const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
-  const db = getFirestore(app); 
+      setLog(fetchedLogs);
+      setIsLoadingLogs(false);
+    }, (error) => {
+        console.error("Error fetching activity logs:", error);
+        setIsLoadingLogs(false);
+        toast({
+            variant: "destructive",
+            title: "Error",
+            description: "Could not fetch activity logs.",
+        });
+    });
+    return () => unsubscribe();
+  }, [hasMounted]);
 
   const addLogEntry = async (entry: Omit<LogEntry, "id" | "timestamp">) => {
     try {
-      // Add a new document with a generated id.
-      const docRef = await addDoc(collection(db, "activityLogs"), {
+      await addDoc(collection(db, "activityLogs"), {
         ...entry,
-        timestamp: serverTimestamp(), // Use server timestamp 
+        timestamp: serverTimestamp(),
       });
-      console.log("Document written with ID: ", docRef.id);
-      // We no longer update local state here.
-      // The ActivityLog component will need to fetch data from Firestore.
     } catch (e) {
       toast({
         variant: "destructive",
@@ -102,56 +109,56 @@ export default function Home() {
       console.error("Error adding document: ", e);
     }
   };
+
   const handleScanSuccess = async (scannedSchoolId: string) => {
-    // The scannedSchoolId is already the extracted school identifier based on the PRD assumption.
     setScannerOpen(false);
+    setIsProcessing(true);
     const formData = form.getValues();
     const selectedSchool = schools.find((s) => s.id === formData.schoolId);
 
-    if (!selectedSchool || selectedSchool.id !== scannedData) {
-      toast({
-        variant: "destructive",
-        title: "QR Code Mismatch",
-        description: "The scanned QR code does not match the selected school.",
-      });
- addLogEntry({
-        ...formData,
-        schoolName: selectedSchool?.name || "Unknown School", // Use selected school name or default
-        status: "failure",
-        reason: "QR Code Mismatch",
-      });
-      setIsProcessing(false);
+    if (!selectedSchool || selectedSchool.id !== scannedSchoolId) {
+      const reason = "QR Code Mismatch";
       setConfirmationStatus({
- success: false,
-        message: "QR Code Mismatch",
- details: `The scanned QR code (${scannedSchoolId}) does not match the selected school (${selectedSchool?.name || 'N/A'}).`,
+        success: false,
+        message: reason,
+        details: `The scanned QR code does not match the selected school.`,
       });
+      addLogEntry({
+        ...formData,
+        schoolName: selectedSchool?.name || "Unknown School",
+        status: "failure",
+        reason,
+      });
+      setConfirmationOpen(true);
+      setIsProcessing(false);
       return;
     }
 
     try {
       const position = await new Promise<GeolocationPosition>((resolve, reject) => {
-        navigator.geolocation.getCurrentPosition(resolve, reject);
+        navigator.geolocation.getCurrentPosition(resolve, reject, {
+          enableHighAccuracy: true,
+          timeout: 5000,
+          maximumAge: 0,
+        });
       });
 
       const { latitude, longitude } = position.coords;
       const distance = calculateDistance(
- latitude,
-        userLongitude: longitude,
-        schoolLatitude: selectedSchool.latitude,
-        schoolLongitude: selectedSchool.longitude,
-      });
+        latitude,
+        longitude,
+        selectedSchool.latitude,
+        selectedSchool.longitude
+      );
 
-      if (result.isWithinProximity) {
-        // Distance is within 100 meters, mark as success
- setConfirmationStatus({
+      if (distance <= 100) {
+        setConfirmationStatus({
           success: true,
           message: `Successful ${formData.action}!`,
           details: `You have successfully completed your ${formData.action} at ${selectedSchool.name}.`,
         });
         addLogEntry({ ...formData, schoolName: selectedSchool.name, status: "success", reason: "Location verified" });
       } else {
-        // Distance is greater than 100 meters, mark as failure
         setConfirmationStatus({
           success: false,
           message: `${formData.action} Failed`,
@@ -159,21 +166,21 @@ export default function Home() {
         });
         addLogEntry({ ...formData, schoolName: selectedSchool.name, status: "failure", reason: "Not within proximity" });
       }
-      setConfirmationOpen(true);
-
     } catch (error) {
-      const reason = error instanceof GeolocationPositionError && error.code === 1
-        ? "Location access denied."
-        : "Could not retrieve location.";
-      
-      toast({
-        variant: "destructive",
-        title: "Location Error",
-        description: reason,
+        let reason = "Could not retrieve location.";
+        if (error instanceof GeolocationPositionError) {
+            if (error.code === 1) reason = "Location access denied.";
+            if (error.code === 2) reason = "Location position unavailable.";
+            if (error.code === 3) reason = "Location request timed out.";
+        }
+      setConfirmationStatus({
+          success: false,
+          message: "Location Error",
+          details: reason,
       });
       addLogEntry({ ...formData, schoolName: selectedSchool.name, status: "failure", reason });
- setConfirmationOpen(true); // Open confirmation for location errors as well
     } finally {
+      setConfirmationOpen(true);
       setIsProcessing(false);
     }
   };
@@ -181,20 +188,35 @@ export default function Home() {
 
   const onSubmit = async () => {
     try {
-      await navigator.mediaDevices.getUserMedia({ video: true });
+      // Check for camera permission by trying to get the media stream
+      const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+      // Stop the stream immediately after permission is granted to free up the camera
+      stream.getTracks().forEach(track => track.stop());
+      setScannerOpen(true);
     } catch (error) {
+      console.error("Camera permission error:", error);
       toast({
         variant: "destructive",
         title: "Camera Permission Denied",
         description: "Please allow camera access to scan QR codes.",
       });
+      const formData = form.getValues();
+      const selectedSchool = schools.find((s) => s.id === formData.schoolId);
+      addLogEntry({
+          ...formData,
+          schoolName: selectedSchool?.name || "Unknown School",
+          status: "failure",
+          reason: "Camera permission denied",
+      });
     }
-    setScannerOpen(true);
-    setIsProcessing(true); // Set processing to true when scanning begins
   };
 
   if (!hasMounted) {
-    return null; // or a loading spinner
+    return (
+        <div className="flex h-screen items-center justify-center">
+            <Loader2 className="h-8 w-8 animate-spin" />
+        </div>
+    );
   }
 
   return (
@@ -290,7 +312,7 @@ export default function Home() {
                     )}
                   />
                   
- <Button type="submit" className="w-full" disabled={isProcessing}>
+                  <Button type="submit" className="w-full" disabled={isProcessing}>
                     {isProcessing ? (
                       <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                     ) : (
@@ -298,12 +320,12 @@ export default function Home() {
                     )}
                     {isProcessing ? "Processing..." : "Scan QR & Submit"}
                   </Button>
- </form>
+                </form>
               </Form>
             </CardContent>
           </Card>
 
-          <ActivityLog log={log} />
+          <ActivityLog log={log} isLoading={isLoadingLogs} />
         </div>
       </main>
 
@@ -314,6 +336,7 @@ export default function Home() {
             onScanSuccess={handleScanSuccess}
             onScanError={(error) => {
               setScannerOpen(false);
+              setIsProcessing(false);
               toast({ variant: 'destructive', title: 'QR Scan Error', description: error });
             }}
           />

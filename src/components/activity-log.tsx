@@ -20,6 +20,19 @@ interface ActivityLogProps {
   isLoading: boolean;
 }
 
+const ActivityLogSkeleton = () => (
+    <TableRow>
+        <TableCell colSpan={6}>
+            <div className="space-y-2">
+                <Skeleton className="h-4 w-full" />
+                <Skeleton className="h-4 w-full" />
+                <Skeleton className="h-4 w-4/5" />
+            </div>
+        </TableCell>
+    </TableRow>
+);
+
+
 export default function ActivityLog({ log, isLoading }: ActivityLogProps) {
   return (
     <Card className="w-full shadow-lg">
@@ -40,7 +53,13 @@ export default function ActivityLog({ log, isLoading }: ActivityLogProps) {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {log.length === 0 ? (
+              {isLoading ? (
+                <>
+                    <ActivityLogSkeleton />
+                    <ActivityLogSkeleton />
+                    <ActivityLogSkeleton />
+                </>
+              ) : log.length === 0 ? (
                 <TableRow>
                   <TableCell colSpan={6} className="h-24 text-center">
                     No activity yet.
@@ -50,7 +69,7 @@ export default function ActivityLog({ log, isLoading }: ActivityLogProps) {
                 log.map((entry) => (
                   <TableRow key={entry.id}>
                     <TableCell className="font-medium">
-                      {format(entry.timestamp, "PPpp")}
+                      {format(new Date(entry.timestamp), "PPpp")}
                     </TableCell>
                     <TableCell>{entry.fullName}</TableCell>
                     <TableCell>{entry.schoolName}</TableCell>
