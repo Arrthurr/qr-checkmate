@@ -1,5 +1,7 @@
 "use client";
 
+import { initializeApp, getApps, getApp } from "firebase/app";
+import { getFirestore, collection, addDoc, serverTimestamp } from "firebase/firestore";
 import { useState, useEffect } from "react";
 import { z } from "zod";
 import { useForm } from "react-hook-form";
@@ -19,6 +21,16 @@ import { useToast } from "@/hooks/use-toast";
 import QrScannerDialog from "@/components/qr-scanner-dialog";
 import ConfirmationDialog from "@/components/confirmation-dialog";
 import ActivityLog from "@/components/activity-log";
+
+// TODO: Replace with your project's Firebase configuration
+const firebaseConfig = { 
+  apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
+  authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN,
+  projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
+  storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
+  appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID,
+};
 
 const formSchema = z.object({
   fullName: z.string().min(2, { message: "Full name must be at least 2 characters." }),
@@ -47,18 +59,26 @@ export default function Home() {
     setHasMounted(true);
   }, []);
 
-  const addLogEntry = (entry: Omit<LogEntry, "id" | "timestamp">) => {
-    setLog(prevLog => [
-      {
-        id: new Date().toISOString() + Math.random(),
-        timestamp: new Date(),
-        ...entry,
-      },
-      ...prevLog,
-    ]);
-  };
+  // Initialize Firebase only if it hasn't been initialized yet
+  const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
+  const db = getFirestore(app); 
 
-  const handleScanSuccess = async (scannedData: string) => {
+  const addLogEntry = async (entry: Omit<LogEntry, "id" | "timestamp">) => {
+    try {
+      // Add a new document with a generated id.
+      const docRef = await addDoc(collection(db, "activityLogs"), {
+        ...entry,
+        timestamp: serverTimestamp(), // Use server timestamp 
+      });
+      console.log("Document written with ID: ", docRef.id);
+      // We no longer update local state here.
+      // The ActivityLog component will need to fetch data from Firestore.
+    } catch (e) {
+      console.error("Error adding document: ", e);
+    }
+  };
+  const handleScanSuccess = async (scannedSchoolId: string) => {
+    // The scannedSchoolId is already the extracted school identifier based on the PRD assumption.
     setScannerOpen(false);
     setIsProcessing(true);
     const formData = form.getValues();
@@ -70,16 +90,21 @@ export default function Home() {
         title: "QR Code Mismatch",
         description: "The scanned QR code does not match the selected school.",
       });
-      addLogEntry({
-        ...formData,
-        schoolName: selectedSchool?.name || "Unknown",
+ addLogEntry({
+ ...formData,
+        schoolName: selectedSchool?.name || scannedSchoolId, // Use scanned ID if school not found
         status: "failure",
         reason: "QR Code Mismatch",
       });
       setIsProcessing(false);
+      setConfirmationStatus({
+ success: false,
+        message: "QR Code Mismatch",
+ details: "The scanned QR code does not match the selected school.",
+      });
       return;
     }
-
+ 
     try {
       const position = await new Promise<GeolocationPosition>((resolve, reject) => {
         navigator.geolocation.getCurrentPosition(resolve, reject);
@@ -111,7 +136,7 @@ export default function Home() {
       }
       setConfirmationOpen(true);
       form.reset();
-
+ 
     } catch (error) {
       const reason = error instanceof GeolocationPositionError && error.code === 1
         ? "Location access denied."
@@ -128,7 +153,16 @@ export default function Home() {
     }
   };
   
-  const onSubmit = () => {
+  const onSubmit = async () => {
+    try {
+      await navigator.mediaDevices.getUserMedia({ video: true });
+    } catch (error) {
+      toast({
+        variant: "destructive",
+        title: "Camera Permission Denied",
+        description: "Please allow camera access to scan QR codes.",
+      });
+    }
     setScannerOpen(true);
   };
 
@@ -229,7 +263,7 @@ export default function Home() {
                     )}
                   />
                   
-                  <Button type="submit" className="w-full" disabled={isProcessing}>
+ <Button type="submit" className="w-full" disabled={isProcessing}>
                     {isProcessing ? (
                       <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                     ) : (
@@ -237,7 +271,7 @@ export default function Home() {
                     )}
                     {isProcessing ? "Processing..." : "Scan QR & Submit"}
                   </Button>
-                </form>
+ </form>
               </Form>
             </CardContent>
           </Card>
