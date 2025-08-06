@@ -13,12 +13,14 @@ import {
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { CheckCircle, XCircle } from "lucide-react";
+import { Skeleton } from "@/components/ui/skeleton";
 
 interface ActivityLogProps {
   log: LogEntry[];
+  isLoading: boolean;
 }
 
-export default function ActivityLog({ log }: ActivityLogProps) {
+export default function ActivityLog({ log, isLoading }: ActivityLogProps) {
   return (
     <Card className="w-full shadow-lg">
       <CardHeader>

@@ -1,5 +1,5 @@
 "use client";
-
+import { query, orderBy, onSnapshot } from "firebase/firestore";
 import { initializeApp, getApps, getApp } from "firebase/app";
 import { getFirestore, collection, addDoc, serverTimestamp } from "firebase/firestore";
 import { useState, useEffect } from "react";
@@ -59,6 +59,26 @@ export default function Home() {
     setHasMounted(true);
   }, []);
 
+ useEffect(() => {
+ if (!hasMounted) return;
+
+    const logsCollection = collection(db, "activityLogs");
+    const q = query(logsCollection, orderBy("timestamp", "desc"));
+
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const fetchedLogs: LogEntry[] = snapshot.docs.map(doc => ({
+        id: doc.id,
+        timestamp: doc.data().timestamp?.toDate() || new Date(), // Convert Firestore Timestamp to Date
+        fullName: doc.data().fullName,
+        schoolName: doc.data().schoolName,
+        action: doc.data().action,
+        status: doc.data().status,
+        reason: doc.data().reason,
+      }));
+ setLog(fetchedLogs);
+ });
+ return () => unsubscribe(); // Cleanup on component unmount
+  }, [hasMounted, db]); // Depend on hasMounted and db
   // Initialize Firebase only if it hasn't been initialized yet
   const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
   const db = getFirestore(app); 
@@ -74,15 +94,19 @@ export default function Home() {
       // We no longer update local state here.
       // The ActivityLog component will need to fetch data from Firestore.
     } catch (e) {
+      toast({
+        variant: "destructive",
+        title: "Logging Error",
+        description: "Failed to save activity log.",
+      });
       console.error("Error adding document: ", e);
     }
   };
   const handleScanSuccess = async (scannedSchoolId: string) => {
     // The scannedSchoolId is already the extracted school identifier based on the PRD assumption.
     setScannerOpen(false);
-    setIsProcessing(true);
     const formData = form.getValues();
-    const selectedSchool = schools.find(s => s.id === formData.schoolId);
+    const selectedSchool = schools.find((s) => s.id === formData.schoolId);
 
     if (!selectedSchool || selectedSchool.id !== scannedData) {
       toast({
@@ -91,8 +115,8 @@ export default function Home() {
         description: "The scanned QR code does not match the selected school.",
       });
  addLogEntry({
- ...formData,
-        schoolName: selectedSchool?.name || scannedSchoolId, // Use scanned ID if school not found
+        ...formData,
+        schoolName: selectedSchool?.name || "Unknown School", // Use selected school name or default
         status: "failure",
         reason: "QR Code Mismatch",
       });
@@ -100,32 +124,34 @@ export default function Home() {
       setConfirmationStatus({
  success: false,
         message: "QR Code Mismatch",
- details: "The scanned QR code does not match the selected school.",
+ details: `The scanned QR code (${scannedSchoolId}) does not match the selected school (${selectedSchool?.name || 'N/A'}).`,
       });
       return;
     }
- 
+
     try {
       const position = await new Promise<GeolocationPosition>((resolve, reject) => {
-        userLatitude: latitude,
+        navigator.geolocation.getCurrentPosition(resolve, reject);
+      });
+
+      const { latitude, longitude } = position.coords;
+      const distance = calculateDistance(
+ latitude,
         userLongitude: longitude,
         schoolLatitude: selectedSchool.latitude,
         schoolLongitude: selectedSchool.longitude,
       });
 
       if (result.isWithinProximity) {
-        navigator.geolocation.getCurrentPosition(resolve, reject);
-      });
-
-      const { latitude, longitude } = position.coords;
-      const result = await verifyLocation({
-        setConfirmationStatus({
+        // Distance is within 100 meters, mark as success
+ setConfirmationStatus({
           success: true,
           message: `Successful ${formData.action}!`,
           details: `You have successfully completed your ${formData.action} at ${selectedSchool.name}.`,
         });
         addLogEntry({ ...formData, schoolName: selectedSchool.name, status: "success", reason: "Location verified" });
       } else {
+        // Distance is greater than 100 meters, mark as failure
         setConfirmationStatus({
           success: false,
           message: `${formData.action} Failed`,
@@ -134,8 +160,7 @@ export default function Home() {
         addLogEntry({ ...formData, schoolName: selectedSchool.name, status: "failure", reason: "Not within proximity" });
       }
       setConfirmationOpen(true);
-      form.reset();
- 
+
     } catch (error) {
       const reason = error instanceof GeolocationPositionError && error.code === 1
         ? "Location access denied."
@@ -147,11 +172,13 @@ export default function Home() {
         description: reason,
       });
       addLogEntry({ ...formData, schoolName: selectedSchool.name, status: "failure", reason });
+ setConfirmationOpen(true); // Open confirmation for location errors as well
     } finally {
       setIsProcessing(false);
     }
   };
   
+
   const onSubmit = async () => {
     try {
       await navigator.mediaDevices.getUserMedia({ video: true });
@@ -163,6 +190,7 @@ export default function Home() {
       });
     }
     setScannerOpen(true);
+    setIsProcessing(true); // Set processing to true when scanning begins
   };
 
   if (!hasMounted) {
