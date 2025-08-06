@@ -6,7 +6,7 @@ import { useState, useEffect } from "react";
 import { z } from "zod";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { verifyLocation } from "@/ai/flows/verify-location";
+import { calculateDistance } from "@/lib/utils";
 import { schools } from "@/lib/schools";
 import type { School, LogEntry, FormSchemaType } from "@/lib/types";
 import { QrCode, CheckCircle, XCircle, Loader2 } from "lucide-react";
@@ -107,12 +107,6 @@ export default function Home() {
  
     try {
       const position = await new Promise<GeolocationPosition>((resolve, reject) => {
-        navigator.geolocation.getCurrentPosition(resolve, reject);
-      });
-
-      const { latitude, longitude } = position.coords;
-
-      const result = await verifyLocation({
         userLatitude: latitude,
         userLongitude: longitude,
         schoolLatitude: selectedSchool.latitude,
@@ -120,6 +114,11 @@ export default function Home() {
       });
 
       if (result.isWithinProximity) {
+        navigator.geolocation.getCurrentPosition(resolve, reject);
+      });
+
+      const { latitude, longitude } = position.coords;
+      const result = await verifyLocation({
         setConfirmationStatus({
           success: true,
           message: `Successful ${formData.action}!`,
