@@ -2,7 +2,7 @@ import type { School } from "./types";
 
 export const schools: School[] = [
     {
-    id: "agustus-tolton",
+    id: "augustus-tolton",
     name: "Augustus Tolton",
     latitude: 41.76,
     longitude: -87.62,
