@@ -4,7 +4,7 @@ export const schools: School[] = [
   {
     id: "walter-payton",
     name: "Walter Payton - CONTROL",
-    latitude: 41.9,
+    latitude: 41.90,
     longitude: -87.63,
   },
   {
