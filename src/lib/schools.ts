@@ -1,7 +1,13 @@
 import type { School } from "./types";
 
 export const schools: School[] = [
-    {
+  {
+    id: "walter-payton",
+    name: "Walter Payton - CONTROL",
+    latitude: 41.9,
+    longitude: -87.63,
+  },
+  {
     id: "augustus-tolton",
     name: "Augustus Tolton",
     latitude: 41.76,
@@ -17,7 +23,7 @@ export const schools: School[] = [
     id: "cambridge",
     name: "Cambridge School",
     latitude: 41.81,
-    longitude: -87.60,
+    longitude: -87.6,
   },
   {
     id: "chicago-sda",
@@ -82,8 +88,8 @@ export const schools: School[] = [
   {
     id: "ita-vla",
     name: "ITA Village Leadership Academy",
-    latitude: 41.80,
-    longitude: -87.60,
+    latitude: 41.8,
+    longitude: -87.6,
   },
   {
     id: "lydia-home",
@@ -142,7 +148,7 @@ export const schools: School[] = [
   {
     id: "st-margaret",
     name: "St. Margaret of Scotland School",
-    latitude: 41.70,
+    latitude: 41.7,
     longitude: -87.66,
   },
   {
@@ -172,13 +178,7 @@ export const schools: School[] = [
   {
     id: "visitation-catholic",
     name: "Visitation Catholic School",
-    latitude: 41.80,
+    latitude: 41.8,
     longitude: -87.64,
   },
-  {
-    id: "walter-payton",
-    name: "Walter Payton - CONTROL",
-    latitude: 41.90,
-    longitude: -87.63,
-  }
 ];
