@@ -1,7 +1,13 @@
 import type { School } from "./types";
 
 export const schools: School[] = [
-    {
+  {
+    id: "walter-payton",
+    name: "Walter Payton - CONTROL",
+    latitude: 41.90,
+    longitude: -87.63,
+  },
+  {
     id: "augustus-tolton",
     name: "Augustus Tolton",
     latitude: 41.76,
@@ -174,11 +180,5 @@ export const schools: School[] = [
     name: "Visitation Catholic School",
     latitude: 41.80,
     longitude: -87.64,
-  },
-  {
-    id: "walter-payton",
-    name: "Walter Payton - CONTROL",
-    latitude: 41.90,
-    longitude: -87.63,
   }
 ];
