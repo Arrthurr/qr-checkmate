@@ -187,27 +187,19 @@ export default function Home() {
   
 
   const onSubmit = async () => {
+    // Open the scanner dialog immediately to ensure the container mounts
+    setScannerOpen(true);
+
+    // Prewarm camera permission within the same user gesture on iOS
+    // Do not block on errors; simply log and proceed. Stop tracks immediately.
     try {
-      // Check for camera permission by trying to get the media stream
-      const stream = await navigator.mediaDevices.getUserMedia({ video: true });
-      // Stop the stream immediately after permission is granted to free up the camera
-      stream.getTracks().forEach(track => track.stop());
-      setScannerOpen(true);
-    } catch (error) {
-      console.error("Camera permission error:", error);
-      toast({
-        variant: "destructive",
-        title: "Camera Permission Denied",
-        description: "Please allow camera access to scan QR codes.",
+      const s = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: "environment" },
+        audio: false,
       });
-      const formData = form.getValues();
-      const selectedSchool = schools.find((s) => s.id === formData.schoolId);
-      addLogEntry({
-          ...formData,
-          schoolName: selectedSchool?.name || "Unknown School",
-          status: "failure",
-          reason: "Camera permission denied",
-      });
+      s.getTracks().forEach((t) => t.stop());
+    } catch (e) {
+      console.warn("Prewarm getUserMedia failed (non-blocking):", e);
     }
   };
 
