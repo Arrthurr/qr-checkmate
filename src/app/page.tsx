@@ -64,6 +64,23 @@ export default function Home() {
     setHasMounted(true);
   }, []);
 
+  // Environment checks: HTTPS and iframe permissions
+  useEffect(() => {
+    if (!hasMounted) return;
+    if (typeof window === 'undefined') return;
+
+    if (!window.isSecureContext) {
+      console.warn("This app should be served over HTTPS for camera access (isSecureContext=false).");
+    }
+
+    const inIframe = (() => {
+      try { return window.self !== window.top; } catch { return true; }
+    })();
+    if (inIframe) {
+      console.warn("If embedding in an iframe, ensure allow=\"camera; microphone; autoplay\" and same-origin or appropriate permissions.");
+    }
+  }, [hasMounted]);
+
  useEffect(() => {
     if (!hasMounted) return;
 
