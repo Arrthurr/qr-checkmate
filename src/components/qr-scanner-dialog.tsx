@@ -16,6 +16,13 @@ function applyVideoAttributes(video: HTMLVideoElement) {
     video.autoplay = true;
     video.setAttribute("muted", "true");
     video.setAttribute("autoplay", "true");
+    
+    // Ensure video starts playing
+    if (video.paused && video.readyState >= 2) {
+      video.play().catch(e => {
+        console.warn('Could not play video:', e);
+      });
+    }
   } catch {}
 }
 
@@ -35,6 +42,16 @@ function watchForVideo(container: HTMLElement, { enforceNoMirror }: { enforceNoM
     if (video) {
       applyVideoAttributes(video);
       if (enforceNoMirror) removeMirrorIfPresent(video);
+      
+      // Add event listener to ensure video plays when loaded
+      video.addEventListener('loadeddata', () => {
+        if (video.paused) {
+          video.play().catch(e => {
+            console.warn('Could not play video on loadeddata:', e);
+          });
+        }
+      }, { once: true });
+      
       return true;
     }
     return false;
@@ -166,6 +183,8 @@ export default function QrScannerDialog({
         videoConstraints,
         // Use default scan types; library will pick camera stream
         supportedScanTypes: [],
+        showTorchButtonIfSupported: true,
+        showZoomSliderIfSupported: true,
       },
       false
     );
@@ -181,7 +200,22 @@ export default function QrScannerDialog({
     };
 
     try {
-      scanner.render(handleSuccess, handleError);
+      await scanner.render(handleSuccess, handleError);
+      
+      // Wait for the scanner to be fully initialized and video element to be created
+      await new Promise<void>((resolve) => {
+        const checkVideo = () => {
+          const containerEl = document.getElementById(readerElementIdRef.current);
+          const video = containerEl?.querySelector('video');
+          if (video && video.readyState >= 2) { // HAVE_CURRENT_DATA
+            resolve();
+          } else {
+            requestAnimationFrame(checkVideo);
+          }
+        };
+        checkVideo();
+      });
+
       // After render, enforce mobile video attributes and mirroring rules
       const containerEl = document.getElementById(readerElementIdRef.current);
       if (containerEl) {
@@ -192,6 +226,16 @@ export default function QrScannerDialog({
           )
         );
         watchForVideo(containerEl, { enforceNoMirror: preferEnv });
+        
+        // Force video to start playing if it's not already
+        const video = containerEl.querySelector('video') as HTMLVideoElement;
+        if (video && video.paused) {
+          try {
+            await video.play();
+          } catch (playError) {
+            console.warn('Could not autoplay video:', playError);
+          }
+        }
       }
     } catch (e: any) {
       // If constraints turned out to be overconstrained at render-time, retry looser ones once
@@ -207,12 +251,39 @@ export default function QrScannerDialog({
                 rememberLastUsedCamera: true,
                 videoConstraints: retryConstraints,
                 supportedScanTypes: [],
+                showTorchButtonIfSupported: true,
+                showZoomSliderIfSupported: true,
               },
               false
             );
             scannerRef.current = retryScanner;
             try {
-              retryScanner.render(handleSuccess, handleError);
+              await retryScanner.render(handleSuccess, handleError);
+              
+              // Wait for video initialization on retry
+              await new Promise<void>((resolve) => {
+                const checkVideo = () => {
+                  const containerEl = document.getElementById(readerElementIdRef.current);
+                  const video = containerEl?.querySelector('video');
+                  if (video && video.readyState >= 2) {
+                    resolve();
+                  } else {
+                    requestAnimationFrame(checkVideo);
+                  }
+                };
+                checkVideo();
+              });
+
+              // Force video play on retry
+              const containerEl = document.getElementById(readerElementIdRef.current);
+              const video = containerEl?.querySelector('video') as HTMLVideoElement;
+              if (video && video.paused) {
+                try {
+                  await video.play();
+                } catch (playError) {
+                  console.warn('Could not autoplay video on retry:', playError);
+                }
+              }
               return;
             } catch (e2: any) {
               onScanError(e2?.message ?? "Failed to start QR scanner (retry)");
